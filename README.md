@@ -37,6 +37,22 @@ aws sts get-caller-identity
 The provider and backend deliberately contain no profile name so each operator
 or automation environment can select its own credentials.
 
+## Access levels
+
+The permission sets use AWS-managed policies. AWS defines and may update the
+underlying permissions; this repository defines who receives them and for how
+long.
+
+| Permission set | AWS-managed policy | PSG assignment | Session | Intended use |
+| --- | --- | --- | --- | --- |
+| `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | `PSG-Infrastructure` group | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
+| `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Direct user assignment | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
+
+PowerUser access is not read-only: it can create, modify, and delete most AWS
+resources and data. Start with `psg-power`; use `psg-admin` only when the task
+requires administrative permissions. AWS's broader job-function descriptions
+are documented in [AWS managed policies for job functions](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html).
+
 ## OpenTofu workflow
 
 ```sh
@@ -59,8 +75,7 @@ s3://psg-infra-prod-tfstate/identity-center/prod.tfstate
 ```
 
 Native S3 state locking and server-side AES-256 encryption are enabled, and
-public access is blocked. Bucket versioning is not currently enabled and is an
-outstanding recovery-hardening task.
+public access is blocked. Bucket versioning is enabled for state recovery.
 
 ## Imported-resource recovery
 
