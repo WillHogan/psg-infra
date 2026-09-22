@@ -24,6 +24,13 @@
 - Summarize every proposed create, change, and destroy before requesting approval to apply.
 - Do not edit or replace remote state manually.
 
+## EC2 platform defaults
+
+- Use the current Ubuntu LTS release for new human-operated Linux EC2 hosts unless the workload has a documented reason to use another distribution.
+- Prefer AWS Graviton (ARM64) instance types for better price-performance and resource efficiency when the workload supports ARM64.
+- Use x86_64 when a required application, native dependency, vendor image, or binary distribution does not support ARM64; architecture compatibility takes precedence over the default.
+- Select official publisher images and verify that the chosen operating system and architecture support AWS Systems Manager before deployment.
+
 ## State backend
 
 - Bucket: `psg-infra-prod-tfstate`
