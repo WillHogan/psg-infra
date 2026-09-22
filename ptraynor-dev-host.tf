@@ -149,7 +149,9 @@ resource "aws_instance" "ptraynor_dev_host" {
   lifecycle {
     # Bootstrap is applied when the disposable host is created. Package changes
     # on a running development host are managed through SSM to avoid restarts.
-    ignore_changes = [user_data]
+    # AWS releases an auto-assigned public IPv4 address while the instance is
+    # stopped, which otherwise appears as a replacement-triggering drift.
+    ignore_changes = [user_data, associate_public_ip_address]
   }
 }
 
