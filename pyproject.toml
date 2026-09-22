@@ -1,0 +1,8 @@
+[project]
+name = "psg-infra"
+version = "0.1.0"
+description = "PSG infrastructure support tooling"
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg2-binary>=2.9,<3.0",
+]
