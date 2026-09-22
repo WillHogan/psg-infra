@@ -15,6 +15,12 @@ resource "aws_identitystore_group_membership" "william_psg_infrastructure" {
   member_id         = aws_identitystore_user.william_hogan.user_id
 }
 
+resource "aws_identitystore_group_membership" "patrick_psg_infrastructure" {
+  identity_store_id = local.identity_store_id
+  group_id          = aws_identitystore_group.psg_infrastructure.group_id
+  member_id         = aws_identitystore_user.patrick_traynor.user_id
+}
+
 resource "aws_ssoadmin_permission_set" "power_user" {
   instance_arn = local.identity_center_instance_arn
 
