@@ -139,6 +139,13 @@ resource "aws_instance" "ptraynor_dev_host" {
       python3-boto3 \
       python3-psycopg2 \
       python3-venv
+    printf '%s\n' 'export PGSECRET_ID=greenplum/readonly_user' > /etc/profile.d/psg-greenplum.sh
+    chmod 0644 /etc/profile.d/psg-greenplum.sh
+    if ! id -u github-runner >/dev/null 2>&1; then
+      useradd --create-home --shell /bin/bash --user-group github-runner
+    fi
+    passwd -l github-runner
+    install -d -o github-runner -g github-runner -m 0700 /opt/actions-runner
   EOT
 
   tags = {
@@ -165,12 +172,6 @@ resource "aws_vpc_security_group_ingress_rule" "greenplum_from_ptraynor_dev_host
   from_port                    = 5432
   to_port                      = 5432
   referenced_security_group_id = aws_security_group.ptraynor_dev_host.id
-}
-
-resource "aws_identitystore_group_membership" "patrick_ptraynor_dev_access" {
-  identity_store_id = local.identity_store_id
-  group_id          = aws_identitystore_group.ptraynor_dev_access.group_id
-  member_id         = aws_identitystore_user.patrick_traynor.user_id
 }
 
 resource "aws_ssoadmin_permission_set" "ptraynor_dev_access" {
@@ -220,17 +221,4 @@ resource "aws_ssoadmin_permission_set_inline_policy" "ptraynor_dev_access" {
       }
     ]
   })
-}
-
-resource "aws_ssoadmin_account_assignment" "ptraynor_dev_access" {
-  depends_on = [aws_ssoadmin_permission_set_inline_policy.ptraynor_dev_access]
-
-  instance_arn       = local.identity_center_instance_arn
-  permission_set_arn = aws_ssoadmin_permission_set.ptraynor_dev_access.arn
-
-  principal_id   = aws_identitystore_group.ptraynor_dev_access.group_id
-  principal_type = "GROUP"
-
-  target_id   = var.aws_account_id
-  target_type = "AWS_ACCOUNT"
 }

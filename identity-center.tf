@@ -1,69 +1,62 @@
-resource "aws_identitystore_user" "william_hogan" {
-  identity_store_id = local.identity_store_id
-
-  user_name    = "william.hogan"
-  display_name = "Will Hogan"
-
-  name {
-    given_name  = "Will"
-    family_name = "Hogan"
+# Entra ID and SCIM own Identity Center users. OpenTofu only looks up those
+# users and manages their AWS account assignments.
+locals {
+  identity_center_access = {
+    "whogan@preyrasolutions.com" = {
+      permission_sets = toset(["administrator", "power_user", "ptraynor_dev_access"])
+    }
+    "patrick.traynor@preyrasolutions.com" = {
+      permission_sets = toset(["power_user", "ptraynor_dev_access"])
+    }
   }
 
-  emails {
-    value   = "whogan@preyrasolutions.com"
-    type    = "work"
-    primary = true
+  identity_center_permission_set_arns = {
+    administrator       = aws_ssoadmin_permission_set.administrator.arn
+    power_user          = aws_ssoadmin_permission_set.power_user.arn
+    ptraynor_dev_access = aws_ssoadmin_permission_set.ptraynor_dev_access.arn
   }
 
-  lifecycle {
-    # Protect this existing administrator while the Identity Center
-    # configuration is being brought under code.
-    prevent_destroy = true
-
-  }
+  identity_center_account_assignments = merge([
+    for username, access in local.identity_center_access : {
+      for permission_set_key in access.permission_sets :
+      "${username}|${var.aws_account_id}|${permission_set_key}" => {
+        username           = username
+        target_account_id  = var.aws_account_id
+        permission_set_key = permission_set_key
+      }
+    }
+  ]...)
 }
 
-resource "aws_identitystore_user" "patrick_traynor" {
+data "aws_identitystore_user" "scim" {
+  for_each = local.identity_center_access
+
   identity_store_id = local.identity_store_id
 
-  user_name    = "patrick.traynor"
-  display_name = "Patrick Traynor"
-
-  name {
-    given_name  = "Patrick"
-    family_name = "Traynor"
-  }
-
-  emails {
-    value   = "patrick.traynor@preyrasolutions.com"
-    type    = "work"
-    primary = true
+  alternate_identifier {
+    unique_attribute {
+      attribute_path  = "UserName"
+      attribute_value = each.key
+    }
   }
 }
 
 moved {
-  from = aws_identitystore_group.analytics_ssm_access
-  to   = aws_identitystore_group.ptraynor_dev_access
+  from = aws_ssoadmin_account_assignment.william_administrator
+  to   = aws_ssoadmin_account_assignment.user_access["whogan@preyrasolutions.com|538308268352|administrator"]
 }
 
-resource "aws_identitystore_group" "ptraynor_dev_access" {
-  identity_store_id = local.identity_store_id
+resource "aws_ssoadmin_account_assignment" "user_access" {
+  for_each = local.identity_center_account_assignments
 
-  display_name = "ptraynor-dev-access"
-  description  = "Access to Patrick Traynor's development host through SSM."
+  depends_on = [aws_ssoadmin_permission_set_inline_policy.ptraynor_dev_access]
 
-  lifecycle {
-    prevent_destroy = true
-  }
-}
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = local.identity_center_permission_set_arns[each.value.permission_set_key]
 
-moved {
-  from = aws_identitystore_group_membership.william_analytics_ssm_access
-  to   = aws_identitystore_group_membership.william_ptraynor_dev_access
-}
+  principal_id   = data.aws_identitystore_user.scim[each.value.username].user_id
+  principal_type = "USER"
 
-resource "aws_identitystore_group_membership" "william_ptraynor_dev_access" {
-  identity_store_id = local.identity_store_id
-  group_id          = aws_identitystore_group.ptraynor_dev_access.group_id
-  member_id         = aws_identitystore_user.william_hogan.user_id
+  target_id   = each.value.target_account_id
+  target_type = "AWS_ACCOUNT"
 }

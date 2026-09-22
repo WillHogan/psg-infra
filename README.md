@@ -1,18 +1,15 @@
-# PSG infrastructure
+# PSG Infrastructure
 
 OpenTofu configuration for PSG's shared AWS infrastructure and IAM Identity
 Center in AWS account `538308268352`, primarily in `ca-central-1`.
 
-## Current state
+## Current State
 
 OpenTofu currently manages:
 
-- The Will Hogan and Patrick Traynor Identity Center users.
-- The `PSG-Infrastructure` group and their memberships.
-- `PSG-PowerUser`, assigned to the infrastructure group for routine work.
-- `PSG-Administrator`, assigned directly to Will for short-lived administrative work.
-- The `ptraynor-dev-access` group and Will and Patrick's memberships.
-- `PSG-Ptraynor-Dev-Access`, assigned to the dedicated host access group.
+- `PSG-PowerUser`, assigned directly to SCIM-provisioned users through OpenTofu.
+- `PSG-Administrator`, assigned directly to Will through OpenTofu.
+- `PSG-Ptraynor-Dev-Access`, assigned directly to Will and Patrick through OpenTofu.
 - Patrick's hardened Ubuntu 24.04 LTS development host, `ptraynor_dev`, reached exclusively through SSM Session Manager.
 - Secrets Manager containers for the Greenplum `gpadmin` and `readonly_user` credentials.
 
@@ -23,24 +20,37 @@ be used as the source for port 5432 on the ST:TNG RDS security group.
 
 The following work remains:
 
-- Verify and document organization-wide MFA enforcement.
-- Retire the legacy IAM user(s) and associated local profiles only after the transition is complete.
+- Verify and document organization-wide MFA enforcement in Entra ID.
+- Retire the legacy IAM user(s) and associated local profiles after confirming
+  that Identity Center access meets operational needs.
+
+The completed Entra ID and SCIM cutover procedure is retained in
+[identity-center-scim-migration.md](identity-center-scim-migration.md) as a
+historical record.
 
 ## Authentication
 
-Human access uses IAM Identity Center temporary credentials. The verified
-administrative profile is `psg-admin`; configure `psg-power` for routine work.
+Microsoft Entra ID owns human identity, sign-in, and provisioning into IAM
+Identity Center. OpenTofu owns the AWS permission sets and direct account
+assignments for those provisioned users. New users must first be assigned to
+the AWS IAM Identity Center enterprise application in Entra, then granted the
+appropriate AWS account permission set in `identity-center.tf`.
+
+Human access uses IAM Identity Center temporary credentials. Configure
+`psg-power` for routine work; use `psg-admin` for IAM or Identity Center
+administration. The AWS access portal is
+<https://preyra.awsapps.com/start/>.
 
 ```sh
-aws sso login --profile psg-admin
-export AWS_PROFILE=psg-admin
+aws sso login --profile psg-power
+export AWS_PROFILE=psg-power
 aws sts get-caller-identity
 ```
 
 The provider and backend deliberately contain no profile name so each operator
 or automation environment can select its own credentials.
 
-## Access levels
+## Access Levels
 
 The permission sets use AWS-managed policies. AWS defines and may update the
 underlying permissions; this repository defines who receives them and for how
@@ -48,16 +58,16 @@ long.
 
 | Permission set | AWS-managed policy | PSG assignment | Session | Intended use |
 | --- | --- | --- | --- | --- |
-| `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | `PSG-Infrastructure` group | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
-| `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Direct user assignment | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
-| `PSG-Ptraynor-Dev-Access` | Inline, host-scoped Session Manager policy | `ptraynor-dev-access` group | 4 hours | Shell, port-forwarding, and start/stop access to `ptraynor_dev` only. |
+| `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | Will and Patrick | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
+| `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Will | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
+| `PSG-Ptraynor-Dev-Access` | Inline, host-scoped Session Manager policy | Will and Patrick | 4 hours | Shell, port-forwarding, and start/stop access to `ptraynor_dev` only. |
 
 PowerUser access is not read-only: it can create, modify, and delete most AWS
 resources and data. Start with `psg-power`; use `psg-admin` only when the task
 requires administrative permissions. AWS's broader job-function descriptions
 are documented in [AWS managed policies for job functions](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html).
 
-## OpenTofu workflow
+## OpenTofu Workflow
 
 ```sh
 export AWS_PROFILE=psg-admin
@@ -70,15 +80,16 @@ tofu plan
 Do not apply a plan without reviewing every proposed create, change, and
 destroy. Repository instructions require explicit approval before `tofu apply`.
 
-## Patrick's development host
+## Patrick's Development Host
 
-After configuring an IAM Identity Center profile for
-`PSG-Ptraynor-Dev-Access`, start a shell without VPN or SSH:
+After Entra provisioning and an AWS account assignment, follow
+[setup.md](setup.md) to configure the `psg-power` profile and start a shell
+without VPN or SSH:
 
 ```sh
-aws sso login --profile psg-ptraynor-dev
+aws sso login --profile psg-power
 aws ssm start-session \
-  --profile psg-ptraynor-dev \
+  --profile psg-power \
   --region ca-central-1 \
   --target "$(tofu output -raw ptraynor_dev_instance_id)"
 ```
@@ -97,18 +108,24 @@ python ~/test-greenplum.py
 ```
 
 The script connects to `gpdb-priv.preyrasolutions.com:5432`, database `psg`,
-and runs fixed read-only metadata queries as user `readonly_user`. Connection values
-can be overridden with the standard `PGHOST`, `PGPORT`, `PGDATABASE`, and
-`PGUSER` environment variables. `PGPASSWORD` is supported for automation but
-should not be saved in the repository or shell history.
-
-Boto3 is optional. Without it, the command above continues to prompt for the
-password. When Boto3 is available, explicitly request the scoped Secrets Manager
-credential without exporting the password:
+and runs fixed read-only metadata queries as user `readonly_user`. On the managed
+host, the login environment sets `PGSECRET_ID=greenplum/readonly_user`; Boto3
+therefore retrieves that secret through the instance role by default. The script
+prints the secret name it is using, but never prints its value. The equivalent
+explicit command is:
 
 ```sh
 python ~/test-greenplum.py --secret-id greenplum/readonly_user
 ```
+
+Connection values can be overridden with the standard `PGHOST`, `PGPORT`,
+`PGDATABASE`, and `PGUSER` environment variables. `PGPASSWORD` is supported for
+automation but should not be saved in the repository or shell history.
+
+Boto3 remains optional outside the managed host. When `PGSECRET_ID` is unset and
+`--secret-id` is omitted, the script uses `PGPASSWORD` when set or prompts for a
+password. Use `--prompt-password` to force an interactive prompt even on the
+managed host.
 
 For local development or a test through an SSM port-forward, use uv:
 
@@ -126,7 +143,7 @@ Python support tooling uses the standard `pyproject.toml` project metadata and
 uv, with dependencies locked in `uv.lock`. The development host intentionally
 uses its system Python packages, so uv is not required there.
 
-## Greenplum secrets
+## Greenplum Secrets
 
 Secrets Manager holds two credential containers:
 
@@ -156,7 +173,7 @@ read-only and `gpadmin` secrets. If `gpadmin` must be technically unavailable to
 PowerUser holders, add an explicit deny or narrower human permission model; the
 host's scoped instance policy alone does not enforce that boundary.
 
-## State backend
+## State Backend
 
 State is stored at:
 
@@ -166,22 +183,3 @@ s3://psg-infra-prod-tfstate/identity-center/prod.tfstate
 
 Native S3 state locking and server-side AES-256 encryption are enabled, and
 public access is blocked. Bucket versioning is enabled for state recovery.
-
-## Imported-resource recovery
-
-These commands are recorded only for reconstructing state if it is lost; do
-not run them against healthy state.
-
-```sh
-tofu import \
-  aws_identitystore_user.william_hogan \
-  d-9d675c9340/5c9d75b8-c081-7046-ae34-bdc55b33f74c
-
-tofu import \
-  aws_identitystore_group.ptraynor_dev_access \
-  d-9d675c9340/bc0d1508-9061-701b-9a6a-055b570add49
-
-tofu import \
-  aws_identitystore_group_membership.william_ptraynor_dev_access \
-  d-9d675c9340/7c4d9508-2061-7035-e56b-f588aec18d5a
-```

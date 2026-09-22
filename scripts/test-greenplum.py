@@ -100,6 +100,7 @@ def resolve_password(args: argparse.Namespace) -> str:
         return password
 
     if args.secret_id:
+        print(f"Using AWS Secrets Manager secret: {args.secret_id}\n")
         return password_from_secret(args.secret_id, args.aws_region, args.user)
 
     return getpass.getpass(f"Password for {args.user}@{args.host}: ")
