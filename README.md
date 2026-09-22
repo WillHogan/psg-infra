@@ -102,11 +102,24 @@ can be overridden with the standard `PGHOST`, `PGPORT`, `PGDATABASE`, and
 `PGUSER` environment variables. `PGPASSWORD` is supported for automation but
 should not be saved in the repository or shell history.
 
+Boto3 is optional. Without it, the command above continues to prompt for the
+password. When Boto3 is available, explicitly request the scoped Secrets Manager
+credential without exporting the password:
+
+```sh
+python ~/test-greenplum.py --secret-id greenplum/readonly_user
+```
+
 For local development or a test through an SSM port-forward, use uv:
 
 ```sh
 uv sync
 uv run scripts/test-greenplum.py --host 127.0.0.1 --port 15432
+
+uv run --extra aws scripts/test-greenplum.py \
+  --host 127.0.0.1 \
+  --port 15432 \
+  --secret-id greenplum/readonly_user
 ```
 
 Python support tooling uses the standard `pyproject.toml` project metadata and
@@ -124,10 +137,24 @@ Secrets Manager holds two credential containers:
 
 OpenTofu manages the secret containers and access policy, but deliberately does
 not manage secret values because doing so would place the database passwords in
-OpenTofu configuration and state. After applying the infrastructure changes,
-set each value directly in Secrets Manager as JSON with `username` and
-`password` fields. Do not put a password in this repository, a `.tfvars` file,
-or a command that will be retained in shell history.
+OpenTofu configuration and state. Set and rotate each value directly in Secrets
+Manager as JSON with `user` and `password` fields. The test script also accepts
+`username` for compatibility. Do not put a password in this repository, a
+`.tfvars` file, or a command that will be retained in shell history.
+
+The `ptraynor_dev` instance profile supplies temporary AWS credentials to code
+on the host and permits `DescribeSecret` and `GetSecretValue` only for
+`greenplum/readonly_user`. No human SSO profile or static AWS credential should
+be copied onto the instance. This is an ambient permission: any process running
+on the host can potentially retrieve that read-only database password, so the
+host is trusted for PSG development code rather than untrusted workloads.
+
+The instance-role restriction is not a restriction on Pat's separate human
+access. The AWS-managed `PowerUserAccess` policy currently permits Secrets
+Manager actions broadly, so a `PSG-PowerUser` session can retrieve both the
+read-only and `gpadmin` secrets. If `gpadmin` must be technically unavailable to
+PowerUser holders, add an explicit deny or narrower human permission model; the
+host's scoped instance policy alone does not enforce that boundary.
 
 ## State backend
 

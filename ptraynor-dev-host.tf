@@ -136,6 +136,7 @@ resource "aws_instance" "ptraynor_dev_host" {
       python3 \
       python3-pip \
       python-is-python3 \
+      python3-boto3 \
       python3-psycopg2 \
       python3-venv
   EOT
