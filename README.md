@@ -7,20 +7,23 @@ Center in AWS account `538308268352`, primarily in `ca-central-1`.
 
 OpenTofu currently manages:
 
-- The existing Identity Center user.
-- The `PSG-Infrastructure` group and membership.
+- The Will Hogan and Patrick Traynor Identity Center users.
+- The `PSG-Infrastructure` group and their memberships.
 - `PSG-PowerUser`, assigned to the infrastructure group for routine work.
 - `PSG-Administrator`, assigned directly to Will for short-lived administrative work.
-- The existing `analytics-ssm-access` group and Will's membership.
+- The `ptraynor-dev-access` group and Will and Patrick's memberships.
+- `PSG-Ptraynor-Dev-Access`, assigned to the dedicated host access group.
+- Patrick's hardened Ubuntu 24.04 LTS development host, `ptraynor_dev`, reached exclusively through SSM Session Manager.
+- Secrets Manager containers for the Greenplum `gpadmin` and `readonly_user` credentials.
 
-The `analytics-ssm-access` group has no AWS account assignment or permission
-set yet. It is retained for possible SSM port-forwarding access to databases.
+The `ptraynor_dev` host has no inbound security-group rules or SSH key. It has only
+the outbound access needed for SSM, DNS, package downloads, and PostgreSQL on
+port 5432. Its dedicated security group is authorized on Greenplum and should
+be used as the source for port 5432 on the ST:TNG RDS security group.
 
 The following work remains:
 
-- Create new Identity Center users and add their intended access.
 - Verify and document organization-wide MFA enforcement.
-- Define the SSM access policy and account assignment if VPN access is replaced.
 - Retire the legacy IAM user(s) and associated local profiles only after the transition is complete.
 
 ## Authentication
@@ -47,6 +50,7 @@ long.
 | --- | --- | --- | --- | --- |
 | `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | `PSG-Infrastructure` group | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
 | `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Direct user assignment | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
+| `PSG-Ptraynor-Dev-Access` | Inline, host-scoped Session Manager policy | `ptraynor-dev-access` group | 4 hours | Shell, port-forwarding, and start/stop access to `ptraynor_dev` only. |
 
 PowerUser access is not read-only: it can create, modify, and delete most AWS
 resources and data. Start with `psg-power`; use `psg-admin` only when the task
@@ -65,6 +69,65 @@ tofu plan
 
 Do not apply a plan without reviewing every proposed create, change, and
 destroy. Repository instructions require explicit approval before `tofu apply`.
+
+## Patrick's development host
+
+After configuring an IAM Identity Center profile for
+`PSG-Ptraynor-Dev-Access`, start a shell without VPN or SSH:
+
+```sh
+aws sso login --profile psg-ptraynor-dev
+aws ssm start-session \
+  --profile psg-ptraynor-dev \
+  --region ca-central-1 \
+  --target "$(tofu output -raw ptraynor_dev_instance_id)"
+```
+
+The Ubuntu host has Python 3, a `python` alias, `pip`, `venv`, Psycopg 2, and
+`psql` installed. Session Manager starts Linux sessions as login Bash shells in
+the user's home directory. The ST:TNG RDS
+security group must allow PostgreSQL port 5432 from the security group emitted
+by `tofu output -raw ptraynor_dev_security_group_id`.
+
+Using the Greenplum `readonly_user` login, test connectivity from the
+host without putting its password in shell history:
+
+```sh
+python ~/test-greenplum.py
+```
+
+The script connects to `gpdb-priv.preyrasolutions.com:5432`, database `psg`,
+and runs fixed read-only metadata queries as user `readonly_user`. Connection values
+can be overridden with the standard `PGHOST`, `PGPORT`, `PGDATABASE`, and
+`PGUSER` environment variables. `PGPASSWORD` is supported for automation but
+should not be saved in the repository or shell history.
+
+For local development or a test through an SSM port-forward, use uv:
+
+```sh
+uv sync
+uv run scripts/test-greenplum.py --host 127.0.0.1 --port 15432
+```
+
+Python support tooling uses the standard `pyproject.toml` project metadata and
+uv, with dependencies locked in `uv.lock`. The development host intentionally
+uses its system Python packages, so uv is not required there.
+
+## Greenplum secrets
+
+Secrets Manager holds two credential containers:
+
+| Secret name | Database user | Access from `ptraynor_dev` |
+| --- | --- | --- |
+| `greenplum/gpadmin` | `gpadmin` | No |
+| `greenplum/readonly_user` | `readonly_user` | Yes, read-only retrieval |
+
+OpenTofu manages the secret containers and access policy, but deliberately does
+not manage secret values because doing so would place the database passwords in
+OpenTofu configuration and state. After applying the infrastructure changes,
+set each value directly in Secrets Manager as JSON with `username` and
+`password` fields. Do not put a password in this repository, a `.tfvars` file,
+or a command that will be retained in shell history.
 
 ## State backend
 
@@ -88,10 +151,10 @@ tofu import \
   d-9d675c9340/5c9d75b8-c081-7046-ae34-bdc55b33f74c
 
 tofu import \
-  aws_identitystore_group.analytics_ssm_access \
+  aws_identitystore_group.ptraynor_dev_access \
   d-9d675c9340/bc0d1508-9061-701b-9a6a-055b570add49
 
 tofu import \
-  aws_identitystore_group_membership.william_analytics_ssm_access \
+  aws_identitystore_group_membership.william_ptraynor_dev_access \
   d-9d675c9340/7c4d9508-2061-7035-e56b-f588aec18d5a
 ```
