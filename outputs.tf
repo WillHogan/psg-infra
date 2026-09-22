@@ -13,3 +13,12 @@ output "identity_store_id" {
   value       = local.identity_store_id
 }
 
+output "ptraynor_dev_instance_id" {
+  description = "Instance ID to use with AWS Systems Manager Session Manager."
+  value       = aws_instance.ptraynor_dev_host.id
+}
+
+output "ptraynor_dev_security_group_id" {
+  description = "Authorize this security group as the source on the ST:TNG RDS security group."
+  value       = aws_security_group.ptraynor_dev_host.id
+}
