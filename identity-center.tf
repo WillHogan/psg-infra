@@ -15,7 +15,7 @@ locals {
       permission_sets = toset(["greenplum_access"])
     }
     "whogan@preyrasolutions.com" = {
-      permission_sets = toset(["administrator", "greenplum_access", "power_user", "psg_pptx_host_access"])
+      permission_sets = toset(["administrator", "greenplum_access", "power_user", "psg_pptx_host_access", "secure_transfer_legacy_read_only"])
     }
     "patrick.traynor@preyrasolutions.com" = {
       permission_sets = toset(["greenplum_access", "power_user", "psg_pptx_host_access"])
@@ -24,7 +24,7 @@ locals {
       permission_sets = toset(["administrator", "greenplum_access"])
     }
     "hannan.anjum@preyrasolutions.com" = {
-      permission_sets = toset(["greenplum_access"])
+      permission_sets = toset(["greenplum_access", "secure_transfer_legacy_read_only"])
     }
     "james@preyrasolutions.com" = {
       permission_sets = toset(["greenplum_access"])
@@ -33,17 +33,18 @@ locals {
       permission_sets = toset(["greenplum_access"])
     }
     "parabhjot@preyrasolutions.com" = {
-      permission_sets = toset(["dataset_outputs_access", "greenplum_access", "ssm_shell"])
+      permission_sets = toset(["dataset_outputs_access", "greenplum_access", "secure_transfer_legacy_read_only", "ssm_shell"])
     }
   }
 
   identity_center_permission_set_arns = {
-    administrator          = aws_ssoadmin_permission_set.administrator.arn
-    dataset_outputs_access = aws_ssoadmin_permission_set.dataset_outputs_access.arn
-    greenplum_access       = aws_ssoadmin_permission_set.greenplum_access.arn
-    power_user             = aws_ssoadmin_permission_set.power_user.arn
-    psg_pptx_host_access   = aws_ssoadmin_permission_set.psg_pptx_host_access.arn
-    ssm_shell              = aws_ssoadmin_permission_set.ssm_shell.arn
+    administrator                    = aws_ssoadmin_permission_set.administrator.arn
+    dataset_outputs_access           = aws_ssoadmin_permission_set.dataset_outputs_access.arn
+    greenplum_access                 = aws_ssoadmin_permission_set.greenplum_access.arn
+    power_user                       = aws_ssoadmin_permission_set.power_user.arn
+    psg_pptx_host_access             = aws_ssoadmin_permission_set.psg_pptx_host_access.arn
+    secure_transfer_legacy_read_only = aws_ssoadmin_permission_set.secure_transfer_legacy_read_only.arn
+    ssm_shell                        = aws_ssoadmin_permission_set.ssm_shell.arn
   }
 
   identity_center_account_assignments = merge([
@@ -83,6 +84,7 @@ resource "aws_ssoadmin_account_assignment" "user_access" {
     aws_ssoadmin_permission_set_inline_policy.dataset_outputs_access,
     aws_ssoadmin_permission_set_inline_policy.greenplum_access,
     aws_ssoadmin_permission_set_inline_policy.psg_pptx_host_access,
+    aws_ssoadmin_permission_set_inline_policy.secure_transfer_legacy_read_only,
     aws_ssoadmin_permission_set_inline_policy.ssm_shell,
   ]
 

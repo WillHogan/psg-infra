@@ -28,6 +28,16 @@ output "psg_dataset_outputs_bucket_name" {
   value       = aws_s3_bucket.psg_dataset_outputs.id
 }
 
+output "secure_transfer_legacy_bucket_name" {
+  description = "S3 bucket containing the read-only legacy Secure Transfer file mirror."
+  value       = aws_s3_bucket.secure_transfer_legacy.id
+}
+
+output "secure_transfer_legacy_sync_instance_profile_name" {
+  description = "Instance profile to associate with the existing Secure Transfer EC2 instance."
+  value       = aws_iam_instance_profile.secure_transfer_legacy_sync.name
+}
+
 output "greenplum_admin_secret_name" {
   description = "Secrets Manager name for the gpadmin credentials."
   value       = aws_secretsmanager_secret.greenplum_admin.name

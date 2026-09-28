@@ -97,6 +97,10 @@ port. No jump box participates in the connection. The associated permission
 set cannot start the default shell document or AWS's unrestricted remote-host
 forwarding document.
 
+Windows users should follow the [PSG AWS workforce access
+guide](docs/psg-workforce-access.md) for prerequisites and parallel WSL and
+native `cmd.exe` setup instructions.
+
 After configuring an AWS CLI profile for `PSG-Greenplum-Access`, start the
 tunnel with:
 
@@ -104,12 +108,7 @@ tunnel with:
 aws ssm start-session \
   --profile psg-greenplum \
   --region ca-central-1 \
-  --target "$(aws ec2 describe-instances \
-    --profile psg-greenplum \
-    --region ca-central-1 \
-    --filters 'Name=tag:SSMGreenplumAccess,Values=true' 'Name=instance-state-name,Values=running' \
-    --query 'Reservations[0].Instances[0].InstanceId' \
-    --output text)" \
+  --target i-08d909db0106c5d7e \
   --document-name PSG-Greenplum-PortForwarding \
   --parameters '{"localPortNumber":["5432"]}'
 ```
