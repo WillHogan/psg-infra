@@ -164,11 +164,10 @@ resource "aws_instance" "psg_pptx_host" {
   EOT
 
   tags = {
-    Name               = "psg_pptx_host"
-    Owner              = "PSG"
-    Purpose            = "PSG PPTX generation"
-    SSMGreenplumAccess = "true"
-    SSMShellAccess     = "true"
+    Name           = "psg_pptx_host"
+    Owner          = "PSG"
+    Purpose        = "PSG PPTX generation"
+    SSMShellAccess = "true"
   }
 
   lifecycle {

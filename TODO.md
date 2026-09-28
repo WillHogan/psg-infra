@@ -35,9 +35,10 @@ Only remove the instance's `prevent_destroy` and AMI/user-data drift guards once
 a replacement host has been built and validated without relying on undocumented
 manual steps.
 
-The current host is also the initial SSM access target for workforce Greenplum
-tunnels and explicitly granted shell access. A shell on this host can use its
-ambient instance-role permissions, including the scoped Greenplum secrets and
-PPTX output bucket access. Separate the general access-host role from the PPTX
-workload role, preferably on a dedicated reproducible host, before expanding
-interactive shell entitlement further.
+The current host is explicitly eligible for SSM shell access. A shell on this
+host can use its ambient instance-role permissions, including the scoped
+Greenplum secrets and PPTX output bucket access. Keep that implication visible
+when granting shell access, and separate interactive administration from the
+PPTX workload role before expanding shell entitlement further. Normal workforce
+Greenplum port forwarding targets `gpdb01` directly and does not use this host
+as a jump box.

@@ -79,7 +79,7 @@ long.
 | `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | Will and Patrick | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
 | `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Will and Colin | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
 | `PSG-Dataset-Outputs-Access` | Inline, bucket-scoped S3 policy | Parabhjot | 8 hours | Direct list, download, upload, and multipart-transfer access to `psg-dataset-outputs`; object deletion is excluded. |
-| `PSG-Greenplum-Access` | Inline, tunnel-only Session Manager policy | All currently provisioned PSG workforce users | 8 hours | Port forwarding through an explicitly tagged host to `gpdb-priv.preyrasolutions.com:5432`; no shell or general AWS management. |
+| `PSG-Greenplum-Access` | Inline, tunnel-only Session Manager policy | All currently provisioned PSG workforce users | 8 hours | Direct port forwarding to Greenplum port 5432 on the explicitly tagged `gpdb01` host; no jump box, shell, or general AWS management. |
 | `PSG-SSM-Shell` | Inline, host-scoped Session Manager policy | Parabhjot | 8 hours | Interactive shell access only to explicitly tagged hosts; no PowerUser or Administrator access. |
 | `PSG-Ptraynor-Dev-Access` (legacy physical name) | Inline, host-scoped Session Manager policy | Will and Patrick | 4 hours | Shell, port-forwarding, and start/stop access to the PSG PPTX host only. |
 
@@ -91,10 +91,11 @@ are documented in [AWS managed policies for job functions](https://docs.aws.amaz
 ## Greenplum Access Through SSM
 
 Normal workforce access uses the custom `PSG-Greenplum-PortForwarding` Session
-document. The document fixes the remote destination to
-`gpdb-priv.preyrasolutions.com:5432`; callers can select only the local client
-port. The associated permission set cannot start the default shell document or
-AWS's unrestricted remote-host forwarding document.
+document and targets the SSM-managed `gpdb01` instance directly. The document
+fixes the target-side port to 5432; callers can select only the local client
+port. No jump box participates in the connection. The associated permission
+set cannot start the default shell document or AWS's unrestricted remote-host
+forwarding document.
 
 After configuring an AWS CLI profile for `PSG-Greenplum-Access`, start the
 tunnel with:
