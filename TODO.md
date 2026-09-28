@@ -34,3 +34,10 @@ a tested backup/migration procedure for anything that must remain persistent.
 Only remove the instance's `prevent_destroy` and AMI/user-data drift guards once
 a replacement host has been built and validated without relying on undocumented
 manual steps.
+
+The current host is also the initial SSM access target for workforce Greenplum
+tunnels and explicitly granted shell access. A shell on this host can use its
+ambient instance-role permissions, including the scoped Greenplum secrets and
+PPTX output bucket access. Separate the general access-host role from the PPTX
+workload role, preferably on a dedicated reproducible host, before expanding
+interactive shell entitlement further.

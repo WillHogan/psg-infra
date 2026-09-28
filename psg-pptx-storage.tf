@@ -66,6 +66,37 @@ resource "aws_s3_bucket_policy" "psg_dataset_outputs" {
   })
 }
 
+resource "aws_ssoadmin_permission_set" "dataset_outputs_access" {
+  instance_arn = local.identity_center_instance_arn
+
+  name             = "PSG-Dataset-Outputs-Access"
+  description      = "Direct read and write access to the PSG dataset outputs bucket."
+  session_duration = "PT8H"
+}
+
+resource "aws_ssoadmin_permission_set_inline_policy" "dataset_outputs_access" {
+  instance_arn       = local.identity_center_instance_arn
+  permission_set_arn = aws_ssoadmin_permission_set.dataset_outputs_access.arn
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListDatasetOutputs"
+        Effect   = "Allow"
+        Action   = ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"]
+        Resource = aws_s3_bucket.psg_dataset_outputs.arn
+      },
+      {
+        Sid      = "ReadAndWriteDatasetOutputs"
+        Effect   = "Allow"
+        Action   = ["s3:AbortMultipartUpload", "s3:GetObject", "s3:ListMultipartUploadParts", "s3:PutObject"]
+        Resource = "${aws_s3_bucket.psg_dataset_outputs.arn}/*"
+      }
+    ]
+  })
+}
+
 import {
   to = aws_s3_bucket.psg_dataset_outputs
   id = "psg-dataset-outputs"

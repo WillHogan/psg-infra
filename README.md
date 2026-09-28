@@ -9,6 +9,9 @@ OpenTofu currently manages:
 
 - `PSG-PowerUser`, assigned directly to SCIM-provisioned users through OpenTofu.
 - `PSG-Administrator`, assigned directly to Will through OpenTofu.
+- `PSG-Dataset-Outputs-Access`, assigned independently to users who need direct dataset-bucket access.
+- `PSG-Greenplum-Access`, assigned to every currently provisioned PSG workforce user.
+- `PSG-SSM-Shell`, assigned only to users who explicitly require an interactive shell.
 - `PSG-Ptraynor-Dev-Access` (legacy physical name), assigned directly to Will and Patrick through OpenTofu for PSG PPTX host access.
 - The hardened Ubuntu 24.04 LTS PSG PPTX host, reached exclusively through SSM Session Manager.
 - The versioned, encrypted `psg-dataset-outputs` bucket used by the PPTX workflow.
@@ -74,13 +77,46 @@ long.
 | Permission set | AWS-managed policy | PSG assignment | Session | Intended use |
 | --- | --- | --- | --- | --- |
 | `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | Will and Patrick | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
-| `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Will | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
+| `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Will and Colin | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
+| `PSG-Dataset-Outputs-Access` | Inline, bucket-scoped S3 policy | Parabhjot | 8 hours | Direct list, download, upload, and multipart-transfer access to `psg-dataset-outputs`; object deletion is excluded. |
+| `PSG-Greenplum-Access` | Inline, tunnel-only Session Manager policy | All currently provisioned PSG workforce users | 8 hours | Port forwarding through an explicitly tagged host to `gpdb-priv.preyrasolutions.com:5432`; no shell or general AWS management. |
+| `PSG-SSM-Shell` | Inline, host-scoped Session Manager policy | Parabhjot | 8 hours | Interactive shell access only to explicitly tagged hosts; no PowerUser or Administrator access. |
 | `PSG-Ptraynor-Dev-Access` (legacy physical name) | Inline, host-scoped Session Manager policy | Will and Patrick | 4 hours | Shell, port-forwarding, and start/stop access to the PSG PPTX host only. |
 
 PowerUser access is not read-only: it can create, modify, and delete most AWS
 resources and data. Start with `psg-power`; use `psg-admin` only when the task
 requires administrative permissions. AWS's broader job-function descriptions
 are documented in [AWS managed policies for job functions](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_job-functions.html).
+
+## Greenplum Access Through SSM
+
+Normal workforce access uses the custom `PSG-Greenplum-PortForwarding` Session
+document. The document fixes the remote destination to
+`gpdb-priv.preyrasolutions.com:5432`; callers can select only the local client
+port. The associated permission set cannot start the default shell document or
+AWS's unrestricted remote-host forwarding document.
+
+After configuring an AWS CLI profile for `PSG-Greenplum-Access`, start the
+tunnel with:
+
+```sh
+aws ssm start-session \
+  --profile psg-greenplum \
+  --region ca-central-1 \
+  --target "$(aws ec2 describe-instances \
+    --profile psg-greenplum \
+    --region ca-central-1 \
+    --filters 'Name=tag:SSMGreenplumAccess,Values=true' 'Name=instance-state-name,Values=running' \
+    --query 'Reservations[0].Instances[0].InstanceId' \
+    --output text)" \
+  --document-name PSG-Greenplum-PortForwarding \
+  --parameters '{"localPortNumber":["5432"]}'
+```
+
+Connect the database client to `localhost:5432`. Greenplum credentials and
+database privileges remain separate from AWS access. Interactive shell access
+uses the distinct `PSG-SSM-Shell` permission set and is limited to instances
+tagged `SSMShellAccess=true`.
 
 ## OpenTofu Workflow
 
