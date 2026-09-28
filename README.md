@@ -9,11 +9,12 @@ OpenTofu currently manages:
 
 - `PSG-PowerUser`, assigned directly to SCIM-provisioned users through OpenTofu.
 - `PSG-Administrator`, assigned directly to Will through OpenTofu.
-- `PSG-Ptraynor-Dev-Access`, assigned directly to Will and Patrick through OpenTofu.
-- Patrick's hardened Ubuntu 24.04 LTS development host, `ptraynor_dev`, reached exclusively through SSM Session Manager.
-- Secrets Manager containers for the Greenplum `gpadmin` and `readonly_user` credentials.
+- `PSG-Ptraynor-Dev-Access` (legacy physical name), assigned directly to Will and Patrick through OpenTofu for PSG PPTX host access.
+- The hardened Ubuntu 24.04 LTS PSG PPTX host, reached exclusively through SSM Session Manager.
+- The versioned, encrypted `psg-dataset-outputs` bucket used by the PPTX workflow.
+- Secrets Manager containers for the Greenplum `gpadmin`, `readonly_user`, and PPTX job credentials.
 
-The `ptraynor_dev` host has no inbound security-group rules or SSH key. It has only
+The PSG PPTX host has no inbound security-group rules or SSH key. It has only
 the outbound access needed for SSM, DNS, package downloads, and PostgreSQL on
 port 5432. Its dedicated security group is authorized on Greenplum and should
 be used as the source for port 5432 on the ST:TNG RDS security group.
@@ -50,6 +51,20 @@ aws sts get-caller-identity
 The provider and backend deliberately contain no profile name so each operator
 or automation environment can select its own credentials.
 
+### Console-managed session setting
+
+The IAM Identity Center **User interactive session duration** is intentionally
+managed in the AWS console because the public IAM Identity Center API and the
+AWS provider do not expose it. Set it to **7 days (168 hours)** at **IAM Identity
+Center → Settings → Authentication → Session duration**. This reduces
+repeated `aws sso login` authentication while retaining the short-lived AWS
+account credentials controlled by each permission set.
+
+This setting is distinct from permission-set session duration; do not change
+the permission-set durations to configure it. With Entra ID as the external
+IdP, AWS may use a shorter interactive session when the SAML assertion supplies
+`SessionNotOnOrAfter`.
+
 ## Access Levels
 
 The permission sets use AWS-managed policies. AWS defines and may update the
@@ -60,7 +75,7 @@ long.
 | --- | --- | --- | --- | --- |
 | `PSG-PowerUser` | [`PowerUserAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/PowerUserAccess.html) | Will and Patrick | 4 hours | Routine infrastructure work. Broad control of AWS resources, but most IAM, Organizations, and account-management actions are excluded. |
 | `PSG-Administrator` | [`AdministratorAccess`](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AdministratorAccess.html) | Will | 1 hour | Short-lived IAM, Identity Center, role, and account administration. Grants all actions on all resources except where another control or root-only restriction applies. |
-| `PSG-Ptraynor-Dev-Access` | Inline, host-scoped Session Manager policy | Will and Patrick | 4 hours | Shell, port-forwarding, and start/stop access to `ptraynor_dev` only. |
+| `PSG-Ptraynor-Dev-Access` (legacy physical name) | Inline, host-scoped Session Manager policy | Will and Patrick | 4 hours | Shell, port-forwarding, and start/stop access to the PSG PPTX host only. |
 
 PowerUser access is not read-only: it can create, modify, and delete most AWS
 resources and data. Start with `psg-power`; use `psg-admin` only when the task
@@ -80,7 +95,7 @@ tofu plan
 Do not apply a plan without reviewing every proposed create, change, and
 destroy. Repository instructions require explicit approval before `tofu apply`.
 
-## Patrick's Development Host
+## PSG PPTX Host
 
 After Entra provisioning and an AWS account assignment, follow
 [setup.md](setup.md) to configure the `psg-power` profile and start a shell
@@ -91,14 +106,14 @@ aws sso login --profile psg-power
 aws ssm start-session \
   --profile psg-power \
   --region ca-central-1 \
-  --target "$(tofu output -raw ptraynor_dev_instance_id)"
+  --target "$(tofu output -raw psg_pptx_host_instance_id)"
 ```
 
 The Ubuntu host has Python 3, a `python` alias, `pip`, `venv`, Psycopg 2, and
 `psql` installed. Session Manager starts Linux sessions as login Bash shells in
 the user's home directory. The ST:TNG RDS
 security group must allow PostgreSQL port 5432 from the security group emitted
-by `tofu output -raw ptraynor_dev_security_group_id`.
+by `tofu output -raw psg_pptx_host_security_group_id`.
 
 Using the Greenplum `readonly_user` login, test connectivity from the
 host without putting its password in shell history:
@@ -145,12 +160,13 @@ uses its system Python packages, so uv is not required there.
 
 ## Greenplum Secrets
 
-Secrets Manager holds two credential containers:
+Secrets Manager holds three credential containers:
 
-| Secret name | Database user | Access from `ptraynor_dev` |
+| Secret name | Database user | Access from PSG PPTX host |
 | --- | --- | --- |
 | `greenplum/gpadmin` | `gpadmin` | No |
 | `greenplum/readonly_user` | `readonly_user` | Yes, read-only retrieval |
+| `greenplum/psg_pptx` | `psg_pptx` | Yes, for the PPTX job |
 
 OpenTofu manages the secret containers and access policy, but deliberately does
 not manage secret values because doing so would place the database passwords in
@@ -159,19 +175,54 @@ Manager as JSON with `user` and `password` fields. The test script also accepts
 `username` for compatibility. Do not put a password in this repository, a
 `.tfvars` file, or a command that will be retained in shell history.
 
-The `ptraynor_dev` instance profile supplies temporary AWS credentials to code
+The PSG PPTX host's instance profile supplies temporary AWS credentials to code
 on the host and permits `DescribeSecret` and `GetSecretValue` only for
-`greenplum/readonly_user`. No human SSO profile or static AWS credential should
-be copied onto the instance. This is an ambient permission: any process running
-on the host can potentially retrieve that read-only database password, so the
-host is trusted for PSG development code rather than untrusted workloads.
+`greenplum/readonly_user` and `greenplum/psg_pptx`. No human SSO profile or
+static AWS credential should be copied onto the instance. These are ambient
+permissions: any process running on the host can potentially retrieve both
+database passwords.
+
+The PPTX job uses `psg_pptx` as its Greenplum login, with its password stored
+under `greenplum/psg_pptx`. The login owns the `psg_pptx` schema and inherits
+the existing `readonly` role. That role has `SELECT` on the existing tables
+and views in `psg.public` (587 base tables and 2 views when granted). It does
+not have general read access to other application schemas. Set the secret's
+`user` and `password` JSON directly in Secrets Manager.
+
+A writable schema in `psg` lets a query combine source and job-owned tables.
+A separate writable database requires separate read and write connections;
+Greenplum cannot query across databases in one session.
+
+The current Greenplum 5 `psg` database grants `CREATE` on `public` to `PUBLIC`.
+The PPTX login inherits that permission even though its intended workspace is
+its own schema. Strictly limiting object creation requires reviewing the effect
+of revoking that shared grant from all users. Greenplum 5 lacks the
+`GRANT SELECT ON ALL TABLES IN SCHEMA` syntax and automatic default privileges;
+the table-creation workflow must grant `SELECT` to `readonly` on new source
+tables and views.
 
 The instance-role restriction is not a restriction on Pat's separate human
 access. The AWS-managed `PowerUserAccess` policy currently permits Secrets
-Manager actions broadly, so a `PSG-PowerUser` session can retrieve both the
-read-only and `gpadmin` secrets. If `gpadmin` must be technically unavailable to
-PowerUser holders, add an explicit deny or narrower human permission model; the
-host's scoped instance policy alone does not enforce that boundary.
+Manager actions broadly, so a `PSG-PowerUser` session can retrieve the
+read-only, PPTX job, and `gpadmin` secrets. If `gpadmin` must be technically
+unavailable to PowerUser holders, add an explicit deny or narrower human
+permission model; the host's scoped instance policy alone does not enforce
+that boundary.
+
+## PPTX Dataset Outputs
+
+The `psg-dataset-outputs` S3 bucket is owned by this configuration. Bucket
+versioning, AES-256 server-side encryption, bucket-owner-enforced object
+ownership, and all four public-access blocks are enabled. The PSG PPTX host can
+list the bucket and get, put, or delete objects through its instance role.
+
+The physical IAM role, instance-profile, and security-group names remain
+`ptraynor_dev` to preserve the existing host and Pat's manually installed
+software. The Identity Center permission set also retains its legacy physical
+name because AWS cannot rename it in place. Their OpenTofu addresses, tags,
+descriptions where mutable, documentation, and outputs use purpose-based PSG
+PPTX naming. Do not rename these legacy physical resources without planning a
+controlled replacement or reattachment.
 
 ## State Backend
 

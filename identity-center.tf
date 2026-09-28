@@ -3,17 +3,17 @@
 locals {
   identity_center_access = {
     "whogan@preyrasolutions.com" = {
-      permission_sets = toset(["administrator", "power_user", "ptraynor_dev_access"])
+      permission_sets = toset(["administrator", "power_user", "psg_pptx_host_access"])
     }
     "patrick.traynor@preyrasolutions.com" = {
-      permission_sets = toset(["power_user", "ptraynor_dev_access"])
+      permission_sets = toset(["power_user", "psg_pptx_host_access"])
     }
   }
 
   identity_center_permission_set_arns = {
-    administrator       = aws_ssoadmin_permission_set.administrator.arn
-    power_user          = aws_ssoadmin_permission_set.power_user.arn
-    ptraynor_dev_access = aws_ssoadmin_permission_set.ptraynor_dev_access.arn
+    administrator        = aws_ssoadmin_permission_set.administrator.arn
+    power_user           = aws_ssoadmin_permission_set.power_user.arn
+    psg_pptx_host_access = aws_ssoadmin_permission_set.psg_pptx_host_access.arn
   }
 
   identity_center_account_assignments = merge([
@@ -49,7 +49,7 @@ moved {
 resource "aws_ssoadmin_account_assignment" "user_access" {
   for_each = local.identity_center_account_assignments
 
-  depends_on = [aws_ssoadmin_permission_set_inline_policy.ptraynor_dev_access]
+  depends_on = [aws_ssoadmin_permission_set_inline_policy.psg_pptx_host_access]
 
   instance_arn       = local.identity_center_instance_arn
   permission_set_arn = local.identity_center_permission_set_arns[each.value.permission_set_key]

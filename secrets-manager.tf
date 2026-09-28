@@ -22,11 +22,23 @@ resource "aws_secretsmanager_secret" "greenplum_readonly" {
   }
 }
 
-# Sessions on ptraynor_dev may retrieve only the read-only database credential.
+resource "aws_secretsmanager_secret" "greenplum_pptx_underscored" {
+  name                    = "greenplum/psg_pptx"
+  description             = "Greenplum credentials for the psg_pptx report job user."
+  recovery_window_in_days = 30
+
+  tags = {
+    Name     = "greenplum/psg_pptx"
+    Service  = "Greenplum"
+    Username = "psg_pptx"
+  }
+}
+
+# Sessions on the PSG PPTX host may retrieve the read-only and PPTX job credentials.
 # The gpadmin credential remains restricted to separately authorized AWS users.
-resource "aws_iam_role_policy" "ptraynor_dev_greenplum_readonly_secret" {
+resource "aws_iam_role_policy" "psg_pptx_host_greenplum_readonly_secret" {
   name = "greenplum-readonly-secret"
-  role = aws_iam_role.ptraynor_dev_host.id
+  role = aws_iam_role.psg_pptx_host.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -35,6 +47,21 @@ resource "aws_iam_role_policy" "ptraynor_dev_greenplum_readonly_secret" {
       Effect   = "Allow"
       Action   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
       Resource = aws_secretsmanager_secret.greenplum_readonly.arn
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "psg_pptx_host_greenplum_pptx_underscored_secret" {
+  name = "greenplum-psg-pptx-secret"
+  role = aws_iam_role.psg_pptx_host.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "ReadGreenplumPptxSecret"
+      Effect   = "Allow"
+      Action   = ["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.greenplum_pptx_underscored.arn
     }]
   })
 }

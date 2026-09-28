@@ -13,14 +13,19 @@ output "identity_store_id" {
   value       = local.identity_store_id
 }
 
-output "ptraynor_dev_instance_id" {
+output "psg_pptx_host_instance_id" {
   description = "Instance ID to use with AWS Systems Manager Session Manager."
-  value       = aws_instance.ptraynor_dev_host.id
+  value       = aws_instance.psg_pptx_host.id
 }
 
-output "ptraynor_dev_security_group_id" {
+output "psg_pptx_host_security_group_id" {
   description = "Authorize this security group as the source on the ST:TNG RDS security group."
-  value       = aws_security_group.ptraynor_dev_host.id
+  value       = aws_security_group.psg_pptx_host.id
+}
+
+output "psg_dataset_outputs_bucket_name" {
+  description = "S3 bucket used by the PSG PPTX generation workflow."
+  value       = aws_s3_bucket.psg_dataset_outputs.id
 }
 
 output "greenplum_admin_secret_name" {
@@ -31,4 +36,9 @@ output "greenplum_admin_secret_name" {
 output "greenplum_readonly_secret_name" {
   description = "Secrets Manager name for the readonly_user credentials."
   value       = aws_secretsmanager_secret.greenplum_readonly.name
+}
+
+output "greenplum_pptx_secret_name" {
+  description = "Secrets Manager name for the psg_pptx report job credentials."
+  value       = aws_secretsmanager_secret.greenplum_pptx_underscored.name
 }
