@@ -24,7 +24,7 @@ locals {
       permission_sets = toset(["administrator", "greenplum_access"])
     }
     "hannan.anjum@preyrasolutions.com" = {
-      permission_sets = toset(["greenplum_access", "secure_transfer_legacy_read_only"])
+      permission_sets = toset(["greenplum_access", "secure_transfer_legacy_read_only", "ssm_shell"])
     }
     "james@preyrasolutions.com" = {
       permission_sets = toset(["greenplum_access"])
