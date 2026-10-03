@@ -1,5 +1,24 @@
 # Infrastructure TODOs
 
+## Add the future ST:TNG SES feedback consumer
+
+The deployed shared SES configuration captures only bounce and complaint events
+through SNS into the `psg-ses-feedback` SQS queue. No consumer is implemented.
+Messages expire after 14 days even if unread; implement ingestion or approve an
+archive before that window elapses if retaining older feedback is required.
+
+Follow ST:TNG's existing Watermill/PostgreSQL event-processing direction. Define
+the external SES-to-internal event mapping, idempotency identity, durable
+ingestion/ack boundary, and queue-scoped IAM in ST:TNG. Evaluate how SES provider
+message IDs will correlate with outbound sends; the current adapter does not
+retain them. Decide application behavior separately rather than adding retry,
+suppression, UI, or notification-state changes to shared infrastructure.
+
+See [the queue contract and forwarding cutover checklist](docs/shared-ses.md).
+Provisioning and authorized bounce/complaint simulator verification completed
+October 2, 2026, followed by disabling domain email feedback forwarding. No
+application consumer or new runtime-role permissions were added.
+
 ## Complete the PSG PPTX host rename
 
 The host formerly described as Patrick Traynor's development host is now the

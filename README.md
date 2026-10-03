@@ -16,6 +16,10 @@ OpenTofu currently manages:
 - The hardened Ubuntu 24.04 LTS PSG PPTX host, reached exclusively through SSM Session Manager.
 - The versioned, encrypted `psg-dataset-outputs` bucket used by the PPTX workflow.
 - Secrets Manager containers for the Greenplum `gpadmin`, `readonly_user`, and PPTX job credentials.
+- Shared SES sending identity/configuration set, custom MAIL FROM
+  `bounce.preyrasolutions.com`, and bounce/complaint capture
+  through SNS into a 14-day SQS queue. Feedback forwarding is disabled after
+  simulator verification; see [the queue contract](docs/shared-ses.md).
 
 The PSG PPTX host has no inbound security-group rules or SSH key. It has only
 the outbound access needed for SSM, DNS, package downloads, and PostgreSQL on
@@ -24,6 +28,9 @@ be used as the source for port 5432 on the ST:TNG RDS security group.
 
 The following work remains:
 
+- Implement the deferred ST:TNG SES feedback consumer when needed; captured
+  events expire after 14 days without consumption or archival. See
+  [the follow-up task](TODO.md#add-the-future-sttng-ses-feedback-consumer).
 - Verify and document organization-wide MFA enforcement in Entra ID.
 - Retire the legacy IAM user(s) and associated local profiles after confirming
   that Identity Center access meets operational needs.
